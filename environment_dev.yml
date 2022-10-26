@@ -1,0 +1,29 @@
+name: dev_transect_viz
+channels:
+  - pyviz
+  - defaults
+  - cadwr-dms
+dependencies:
+ - python
+ - pip
+ - ipython
+ # dev only
+ - autopep8
+ - nbconvert
+ - pytest
+ - pytest-runner
+ # end of dev only
+ - panel=0.13.1 # 0.15 causing issues - N. Sandhu - 10/26/2022 https://github.com/holoviz/panel/issues/3965
+ - hvplot
+ - geoviews
+ #
+ - pandas
+ - geopandas
+ - xarray
+ #
+ - aiohttp
+ - lxml
+ #
+ - vtools3
+ # dev install
+ # pip install --no-deps -e .

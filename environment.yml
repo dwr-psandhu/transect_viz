@@ -1,0 +1,24 @@
+name: transect_viz
+channels:
+  - pyviz
+  - defaults
+  - cadwr-dms
+dependencies:
+ - python
+ - pip
+ - ipython
+ - autopep8
+ #
+ - panel=0.13.1 # 0.15 causing issues - N. Sandhu - 10/26/2022 https://github.com/holoviz/panel/issues/3965
+ - hvplot
+ - geoviews
+ #
+ - pandas
+ - xarray
+ #
+ - aiohttp
+ - lxml
+ #
+ - vtools3
+ - transect-viz
+prefix: /Users/nickysandhu/miniconda3
