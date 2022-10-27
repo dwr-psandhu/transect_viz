@@ -1,35 +1,41 @@
-from dask.dataframe.shuffle import barrier
-import hvplot.pandas
 from . import transect_viz
 from . import transect_generator
-from . import transect_cdec_data
 from vtools.functions.filter import godin
+import pandas as pd
 import numpy as np
+import hvplot.pandas
 import holoviews as hv
 from holoviews import opts, dim
-
-import pandas as pd
-import holoviews as hv
 import panel as pn
 # SIZING_MODE='scale_both'
 # pn.extension(sizing_mode='stretch_width')
 
 
+def filter_quantile(dfdata, column):
+    dfg = dfdata[column]
+    dfg[dfg > dfg.quantile(0.99) * 1.2] = np.nan
+    dfg[dfg < dfg.quantile(0.01) * 0.8] = np.nan
+
+
+def clean_data(dfdata):
+    for c in dfdata.columns:
+        filter_quantile(dfdata, c)
+
+
 class TransectMap:
 
-    def __init__(self, points_file, station_ids, vartype, sdate, edate, value_range, close_transect=False, data_column='EC'):
+    def __init__(self, points_geojson_file, station_csv_file, data_csv_file, sdate, edate, value_range, close_transect=False, data_column='EC'):
         # store for later use
-        self.station_ids = station_ids
         self.sdate = sdate
         self.edate = edate
-        self.vartype = vartype
         self.value_range = value_range
+        self.data_csv_file = data_csv_file
         self.data_column = data_column
         # load transect points
-        self.gdf = transect_generator.read_geojson(points_file)
+        self.gdf = transect_generator.read_geojson(points_geojson_file)
         self.gdf[self.data_column] = np.nan  # change data column to data_values
         # load stations
-        self.dfs = transect_cdec_data.get_stations_cached(self.station_ids)
+        self.dfs = pd.read_csv(station_csv_file)
         self.gdfs = transect_generator.to_geoframe(self.dfs)
         # calculate transect_dist for both points and station points using the transect line created from transect points
         transect_line = transect_generator.create_transect_line(self.gdf)
@@ -47,24 +53,9 @@ class TransectMap:
         self.tidally_filter = False  # show tidally_filter filtered values
 
     def setup(self):
-        self.load_data()
-
-    def load_data(self):
-        self.df_data = transect_cdec_data.get_cdec_data_cached(
-            self.sdate, self.edate, self.station_ids, self.vartype)
-        TransectMap.clean_data(self.df_data)
-        # self.df_data.interpolate() # should we ? or just leave it as is
-        # .resample('1D').mean()#.hvplot() # limit fillin to one tidal cycle (25 hours)
+        self.df_data = pd.read_csv(self.data_csv_file, index_col=0, parse_dates=True)
+        self.df_data = self.df_data.asfreq(pd.infer_freq(self.df_data.index))
         self.df_data_filtered = godin(self.df_data.interpolate('linear', limit=100))
-
-    def filter_quantile(dfdata, column):
-        dfg = dfdata[column]
-        dfg[dfg > dfg.quantile(0.99) * 1.2] = np.nan
-        dfg[dfg < dfg.quantile(0.01) * 0.8] = np.nan
-
-    def clean_data(dfdata):
-        for c in dfdata.columns:
-            TransectMap.filter_quantile(dfdata, c)
 
     def view(self, date_value):
         '''return the holoviews view object'''
@@ -83,7 +74,9 @@ class TransectMap:
         tdval = pd.Timedelta('1D')
         df = self.df_data_filtered if self.tidally_filter else self.df_data
         return df[dval - tdval:dval + tdval].hvplot.line(ylabel='EC',
-                                                     color=list(hv.Cycle.default_cycles['Colorblind'])).opts(title='Measured EC with line at current time')
+                                                     color=list(
+                                                         hv.Cycle.default_cycles['Colorblind'])
+                                                         ).opts(title='Measured EC with line at current time')
 
 
 class TransectMapComposite:
@@ -114,9 +107,9 @@ class TransectMapComposite:
                 tmap.dft, df.loc[date_value].to_frame(), data_column=tmap.data_column)
             dfresults.append(dfresult)
         dfresult = pd.concat(dfresults)
-        map, legend = transect_viz.map_transect_with_size_and_color(
+        ptsmap, legend = transect_viz.map_transect_with_size_and_color(
             dfresult, value_range=value_range)
-        overlay = map.opts(framewise=False, colorbar=True)
+        overlay = ptsmap.opts(framewise=False, colorbar=True)
         if self.show_station_labels:
             overlay = overlay * self.station_labels.opts(framewise=False)
         return overlay
@@ -134,7 +127,7 @@ class TransectMapComposite:
 
 class GeneratedECMapAnimator:
 
-    def __init__(self, transect_map_list, sdate, edate, flow_station_ids, barrier_file, station_info_file):
+    def __init__(self, transect_map_list, sdate, edate, flow_stations_csv_file, flow_data_csv_file, barrier_file, station_info_file):
         #
         self.overlay = None
         #
@@ -142,24 +135,21 @@ class GeneratedECMapAnimator:
         self.tmapc = TransectMapComposite(transect_map_list)
         self.sdate = pd.to_datetime(sdate)
         self.edate = pd.to_datetime(edate)
-        self.flow_station_ids = flow_station_ids
+        self.flow_data_csv_file = flow_data_csv_file
         # load stations
-        self.dfs = transect_cdec_data.get_stations_cached(self.flow_station_ids)
+        self.dfs = pd.read_csv(flow_stations_csv_file)
         self.dfs = transect_viz.add_in_station_info(self.dfs, station_info_file=station_info_file)
         self.gdfs = transect_generator.to_geoframe(self.dfs)
-
+        self.tiles = hv.element.tiles.CartoLight().redim(x='Longitude', y='Latitude')
         self.barrier_file = barrier_file
         self.load_data()
 
     def load_data(self):
-        self.flow_data = transect_cdec_data.get_cdec_data_cached(
-            self.sdate, self.edate, self.flow_station_ids, 'flow')
-        self.clean_data()
+        self.flow_data = pd.read_csv(self.flow_data_csv_file, index_col=0, parse_dates=True)
+        self.flow_data = self.flow_data.asfreq(pd.infer_freq(self.flow_data.index))
+        self.flow_data = self.flow_data.interpolate()  # fill nans
         self.flow_data_filtered = godin(self.flow_data.interpolate('linear', limit=100))
         self.load_barriers()
-
-    def clean_data(self):
-        self.flow_data = self.flow_data.interpolate()  # fill nans
 
     def load_barriers(self):
         self.dfbarrier = transect_viz.read_barriers_info(self.barrier_file)
@@ -173,15 +163,15 @@ class GeneratedECMapAnimator:
                                                      mag_factor=mag_factor, line_width=6, format_str='.0f')
         return vfmap
 
-    def show_transect_map(self, date_value, show_station_labels, gdfs, dfbarrier, value_range=None, tidal_filter=False, mag_factor=1):
+    def show_transect_map(self, date_value, show_station_labels=True, value_range=None, tidal_filter=False, mag_factor=1):
         self.tmapc.show_station_labels = show_station_labels
         self.tmapc.set_tidally_filter(tidal_filter)
         tmap = self.create_transect_map(date_value, value_range)
         dfflow = self.flow_data_filtered if tidal_filter else self.flow_data
-        fvdmap = self.show_flow_vectors_map(date_value, dfflow, gdfs, mag_factor=mag_factor)
-        bpts = self.show_barrier_pts_map(date_value, dfbarrier)
-        overlay = (hv.element.tiles.CartoLight() * tmap *
-                   fvdmap * bpts).opts(title=date_value, frame_width=1000, framewise=False)
+        fvdmap = self.show_flow_vectors_map(date_value, dfflow, self.gdfs, mag_factor=mag_factor)
+        bpts = self.show_barrier_pts_map(date_value, self.dfbarrier)
+        overlay = (self.tiles * tmap * fvdmap * bpts).opts(title=date_value,
+                   frame_width=1000, framewise=False)
         return overlay
 
     def show_flow_vectors_map(self, date_value, dfflow, gdfs, mag_factor):
@@ -215,7 +205,7 @@ class GeneratedECMapAnimator:
         self.time_array = time_array
         # assuming 15 min data, so step should be about 1 tidal cycle
         date_player = pn.widgets.DiscretePlayer(
-            name='Date Player', value=time_array[0], options=time_array, interval=1500, step=1, width=400)
+            name='Date Player', value=time_array[len(time_array) // 2], options=time_array, interval=1500, step=1, width=400)
         self.date_player = date_player  # keep this reference to change its settings later
         date_slider = pn.widgets.DateSlider(name='Date Slider', start=pd.to_datetime(
             time_array[0]), end=pd.to_datetime(time_array[-1]))
@@ -256,8 +246,12 @@ class GeneratedECMapAnimator:
                 target.step = 1
         tidal_filter_box.link(date_player, callbacks={'value': set_player_stepsize})
 
-        dmap = hv.DynamicMap(pn.bind(self.show_transect_map, gdfs=self.gdfs, dfbarrier=self.dfbarrier, value_range=value_range_slider),
-                             streams=dict(date_value=date_player, show_station_labels=show_station_labels_box, tidal_filter=tidal_filter_box, mag_factor=vector_mag_factor_slider))
+        dmap = hv.DynamicMap(pn.bind(self.show_transect_map),
+                             streams=dict(date_value=date_player,
+                             value_range=value_range_slider,
+                             show_station_labels=show_station_labels_box,
+                             tidal_filter=tidal_filter_box,
+                             mag_factor=vector_mag_factor_slider))
         dmap = dmap.opts(framewise=False)
 
         tsmap = hv.DynamicMap(pn.bind(self.ec_plot), streams=dict(

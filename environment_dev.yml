@@ -4,7 +4,7 @@ channels:
   - defaults
   - cadwr-dms
 dependencies:
- - python
+ - python=3.7
  - pip
  - ipython
  # dev only

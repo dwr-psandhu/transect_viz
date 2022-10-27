@@ -17,7 +17,7 @@ def load_transect_file(fname='./Transect_20220302_Fabian.csv'):
 
 
 def points_transect_by_point_size(df, data_column='EC'):
-    return df.hvplot.points('Longitude', 'Latitude', geo=True, s=data_column, hover=True)
+    return df.hvplot.points('Longitude', 'Latitude', geo=True, s=data_column, hover=True, framewise=False)
 
 
 def points_transect_by_color(df, cmap='rainbow4', tiles='CartoLight', data_column='EC'):
@@ -41,29 +41,28 @@ def points_transect_by_size_and_color(df, data_column='EC', cmap='rainbow4',
                                       value_range=None, max_point_size=25, min_point_size=1):
     ns = create_nice_scale(df, data_column=data_column, value_range=value_range)
     points_dim = dim(data_column).norm(limits=(ns.niceMin, ns.niceMax)).clip(0, 1) * \
-        (max_point_size-min_point_size)+min_point_size
+        (max_point_size - min_point_size) + min_point_size
     vdims = [data_column]
     if 'DateTime' in df.columns:
         vdims.append('DateTime')
     scpts = gv.Points(df, kdims=['Longitude', 'Latitude'], vdims=vdims).opts(
-        opts.Points(tools=['hover'], color=data_column, size=points_dim, alpha=0.5, cmap=cmap, clim=(ns.niceMin, ns.niceMax)))
+        opts.Points(tools=['hover'], framewise=False, color=data_column, size=points_dim, alpha=0.5, cmap=cmap, clim=(ns.niceMin, ns.niceMax)))
     return scpts
 
 
-def create_scaled_points_legend(df, data_column='EC', max_point_size=25, min_point_size=1, value_range=None):
-    ns = create_nice_scale(df, data_column=data_column, value_range=value_range)
+def create_scaled_points_legend(ns, max_point_size=25, min_point_size=1):
     data = {
         'x': np.zeros(ns.maxTicks),
-        'y':  np.arange(1, 0, -1./ns.maxTicks),
-        'size': np.array([round((ns.tickSpacing*i)/(ns.niceMax-ns.niceMin)*max_point_size+min_point_size) for i in range(ns.maxTicks)]),
-        'labels': [str(round(a*ns.tickSpacing+ns.niceMin)) for a in range(ns.maxTicks)]
+        'y': np.arange(1, 0, -1. / ns.maxTicks),
+        'size': np.array([round((ns.tickSpacing * i) / (ns.niceMax - ns.niceMin) * max_point_size + min_point_size) for i in range(ns.maxTicks)]),
+        'labels': [str(round(a * ns.tickSpacing + ns.niceMin)) for a in range(ns.maxTicks)]
     }
     values = np.array(data['size'])
     lbls = hv.Labels(data, kdims=['x', 'y'], vdims='labels').opts(
         opts.Labels(text_align='left', text_baseline='middle', xoffset=0.4))
     pts = hv.Points(data, kdims=['x', 'y'], vdims=['size']).opts(
         size='size', ylim=(0, 1.1)).opts(opts.Points(fill_alpha=0))
-    return (lbls*pts).opts(xaxis=None, yaxis=None, toolbar=None)
+    return (lbls * pts).opts(xaxis=None, yaxis=None, toolbar=None)
 
 
 def map_transect_with_size_and_color(df, data_column='EC', cmap='rainbow4',
@@ -72,10 +71,8 @@ def map_transect_with_size_and_color(df, data_column='EC', cmap='rainbow4',
     ns = create_nice_scale(df, data_column=data_column, value_range=value_range)
     scpts = points_transect_by_size_and_color(
         df, data_column, value_range=value_range, cmap=cmap, max_point_size=max_point_size, min_point_size=min_point_size)
-    pts_legend = create_scaled_points_legend(
-        df, data_column=data_column,
-        max_point_size=max_point_size, min_point_size=min_point_size,
-        value_range=value_range).opts(frame_height=pts_legend_height)
+    pts_legend = create_scaled_points_legend(ns,
+        max_point_size=max_point_size, min_point_size=min_point_size).opts(frame_height=pts_legend_height)
     return scpts, pts_legend
 
 
@@ -93,27 +90,27 @@ def get_buffered_start_end_dates(df, time_buffer='2D'):
     get rounded times with a buffer
     '''
     sdate, edate = get_start_end_dates(df)
-    start_date = sdate.floor('1D')-pd.Timedelta(time_buffer)
-    end_date = edate.ceil('1D')+pd.Timedelta(time_buffer)
+    start_date = sdate.floor('1D') - pd.Timedelta(time_buffer)
+    end_date = edate.ceil('1D') + pd.Timedelta(time_buffer)
     return start_date, end_date
 
 
 def points_for_station(dfs):
-    return dfs.hvplot.points(x='Longitude', y='Latitude', geo=True, hover_cols=['Station ID']).opts(frame_width=800)
+    return dfs.hvplot.points(x='Longitude', y='Latitude', geo=True, hover_cols=['Station ID'], framewise=False).opts(frame_width=800)
 
 
 def labels_for_stations(dfs):
-    return dfs.hvplot.labels(x='Longitude', y='Latitude', text='Station ID', geo=True, text_align='left').opts(opts.Labels(xoffset=10, yoffset=10))
+    return gv.Labels(dfs, kdims=['Longitude', 'Latitude'], vdims=['Station ID']).opts(opts.Labels(xoffset=10, yoffset=10, text_align='left', framewise=False))
 
 
 def timespan(start_date, end_date):
-    return hv.VSpan(x1=pd.to_datetime(start_date), x2=pd.to_datetime(end_date)).opts(xlim=(start_date-pd.Timedelta('1D'), end_date+pd.Timedelta('1D')))
+    return hv.VSpan(x1=pd.to_datetime(start_date), x2=pd.to_datetime(end_date)).opts(xlim=(start_date - pd.Timedelta('1D'), end_date + pd.Timedelta('1D')))
 
 
 def plot_data_around_time(start_date, end_date, dflist, data_type, ylabel, title):
     ovl = hv.Overlay([d.hvplot(label=f'{d.columns[0]}').redim(
         **{d.columns[0]:f'{data_type} {d.columns[0]}'}) for d in dflist])
-    return ovl.opts(opts.Curve(ylabel=ylabel)).opts(title=title, xlim=(pd.to_datetime(start_date)-pd.Timedelta('1D'), pd.to_datetime(end_date)+pd.Timedelta('1D')))
+    return ovl.opts(opts.Curve(ylabel=ylabel)).opts(title=title, xlim=(pd.to_datetime(start_date) - pd.Timedelta('1D'), pd.to_datetime(end_date) + pd.Timedelta('1D')))
 
 
 def get_tidal_filtered(dflist, resample_interval='1H'):
@@ -140,7 +137,7 @@ def calculate_travel_distances_in_miles(dflist):
     '''
     Given list of velocities in ft/sec
     '''
-    travel_distances = [v.cumsum()*3600/5280.0 for v in dflist]
+    travel_distances = [v.cumsum() * 3600 / 5280.0 for v in dflist]
 
 
 def mean_velocity_over_time(start_date, end_date, dflist):
@@ -167,9 +164,8 @@ def plot_vectors(dfvector, angle_column='angle', mag_column='mag', line_width=10
     dfvector = dfvector.copy()
     dfvector['Longitude'] += dfvector['arrow_xoffset']
     dfvector['Latitude'] += dfvector['arrow_yoffset']
-    vectors = dfvector.hvplot.vectorfield(
-        x='Longitude', y='Latitude', angle=angle_column,
-        mag=mag_column, geo=True, hover=False, framewise=False).opts(magnitude=mag_column) # hover doesn't work with Vectorfields 
+    vectors = gv.VectorField(dfvector, kdims=['Longitude', 'Latitude'],
+        vdims=[angle_column, mag_column]).opts(framewise=False, magnitude=mag_column)  # hover doesn't work with Vectorfields
     vectors = vectors.opts(opts.VectorField(
         alpha=0.85, color='blue', pivot='mid', line_width=line_width, line_cap='round'))
     return vectors
@@ -181,12 +177,12 @@ def plot_velocity_labels(dfvelgis):
 
 def plot_vector_labels(dfvector, mag_column='mag', units='units', format_str='.02f'):
     dfvector = dfvector.copy()
-    dfvector['label'] = dfvector[mag_column].map(('{:,'+format_str+'} '+units).format)
-    dfvector['Longitude'] += dfvector['arrow_xoffset']+dfvector['value_xoffset']
-    dfvector['Latitude'] += dfvector['arrow_yoffset']+dfvector['value_yoffset']
+    dfvector['label'] = dfvector[mag_column].map(('{:,' + format_str + '} ' + units).format)
+    dfvector['Longitude'] += dfvector['arrow_xoffset'] + dfvector['value_xoffset']
+    dfvector['Latitude'] += dfvector['arrow_yoffset'] + dfvector['value_yoffset']
     # .opts(opts.Labels(text_align='left'))  # , xoffset=40, yoffset=40))
     vec_labels = dfvector.hvplot.labels(
-        x='Longitude', y='Latitude', text='label', geo=True, framewise=False, hover=False) # doesn't respect framewise ?
+        x='Longitude', y='Latitude', text='label', geo=True, hover=False, framewise=False)  # doesn't respect framewise ?
     return vec_labels.opts(framewise=False)
 
 
@@ -201,18 +197,18 @@ def get_mag_dim(mag_column):  # not working yet.  # try lognorm() or norm() with
     max_vec_length = 1000
     min_vec_length = 100
     vec_dim = dim(mag_column).lognorm(limits=(0, 1000)).clip(0, 1) * \
-        (max_vec_length-min_vec_length)+min_vec_length
+        (max_vec_length - min_vec_length) + min_vec_length
     return vec_dim
 
 
 def create_vector_field_map(dfv, angle_column='angle', mag_column='mag', mag_units='', mag_factor=0.1, format_str='.02f', line_width=4):
     dfv = dfv.dropna()
     vecs = plot_vectors(dfv, angle_column=angle_column, mag_column=mag_column)
-    vec_dim = dim(mag_column)*mag_factor
+    vec_dim = dim(mag_column) * mag_factor
     vecs = vecs.opts(magnitude=vec_dim,
                      line_width=line_width, rescale_lengths=False)
     labels = plot_vector_labels(dfv, mag_column=mag_column, units=mag_units, format_str=format_str)
-    return (vecs).opts(framewise=False) #FIXME: labels causing issues with framewise=False
+    return vecs.opts(framewise=False)  # FIXME: labels causing issues with framewise=False
 
 
 def add_in_station_info(dfs, station_info_file='station_info_file.csv'):
@@ -226,26 +222,32 @@ def read_station_display_info(station_info_file='station_info_file.csv'):
     dfinfo = pd.read_csv(station_info_file, index_col=0)
     dfinfo.dtype = float
     dfinfo['angle'] = dfinfo['angle'].fillna(180)
-    dfinfo['angle'] = dfinfo['angle']*math.pi/180
+    dfinfo['angle'] = dfinfo['angle'] * math.pi / 180
     dfinfo = dfinfo.fillna(0.)
     return dfinfo
 
 
-def read_barriers_info(file='barriers.csv'):
+def read_barriers_info(file='barriers.csv'):  # FIXME: move to data module
     dfb = pd.read_csv(file)
     dfb = dfb.astype({'UTMx': 'float', 'UTMy': 'float',
                      'datein': np.datetime64, 'dateout': np.datetime64})
-    return dfb
+    import geopandas as gpd
+    gdfb = gpd.GeoDataFrame(dfb, geometry=gpd.points_from_xy(
+        dfb['UTMx'], dfb['UTMy'], crs='+init=epsg:32610'))
+    gdfb = gdfb.to_crs('EPSG:4326')
+    dfb['Longitude'] = gdfb.geometry.x
+    dfb['Latitude'] = gdfb.geometry.y
+    return dfb.drop(columns=['geometry'])  # gdfb
 
 
 def create_barrier_marks(dfb, date_value):
     dfbnow = dfb[(dfb.datein <= pd.to_datetime(date_value)) &
                  (dfb.dateout >= pd.to_datetime(date_value))]
-    return dfbnow.hvplot.points(x='UTMx', y='UTMy', crs='+init=epsg:32610', geo=True,
-                                marker='square', s=200, color='black', framewise=False)
+    return gv.Points(dfbnow, kdims=['Longitude', 'Latitude']).opts(
+        marker='square', size=20, color='black', framewise=False)
 
 
 def show_map(dfresult, value_range=None):
     map, legend = map_transect_with_size_and_color(dfresult, value_range=value_range)
     carto_light_tiles = get_tile_layer()
-    return carto_light_tiles*map.opts(frame_width=800, colorbar=True)+legend
+    return carto_light_tiles * map.opts(frame_width=800, colorbar=True) + legend

@@ -4,7 +4,7 @@ channels:
   - defaults
   - cadwr-dms
 dependencies:
- - python
+ - python=3.7
  - pip
  - ipython
  - autopep8
@@ -14,6 +14,7 @@ dependencies:
  - geoviews
  #
  - pandas
+ - geopandas
  - xarray
  #
  - aiohttp
