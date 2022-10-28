@@ -6,19 +6,6 @@ from shapely.geometry import Point, LineString
 from shapely.geometry import LinearRing
 from shapely.ops import nearest_points
 
-
-def read_geojson(file, crs='epsg:32610'):
-    '''
-    read geojson file and return it in default crs of UTM Zone 10N, i.e. epsg=32610'''
-    gdf = gpd.read_file(file)
-    return gdf.to_crs('epsg:32610')
-
-
-def to_geojson(gdf, file):
-    '''write out geo dataframe to file using GeoJSON driver'''
-    gdf.to_file(file, driver='GeoJSON')
-
-
 def create_points_along_line(line, delx=25):
     '''
     line is a shapely line string

@@ -96,3 +96,24 @@ def get_cdec_data_cached(sdate, edate, station_ids, data_type, resample_interval
 def clear_cache():
     ensure_dir(cache_dir)
     os.path.remove(cache_dir)
+
+#
+import numpy as np
+def filter_quantile(dfdata, column):
+    dfg = dfdata[column]
+    dfg[dfg > dfg.quantile(0.99) * 1.2] = np.nan
+    dfg[dfg < dfg.quantile(0.01) * 0.8] = np.nan
+
+def clean_data(dfdata):
+    for c in dfdata.columns:
+        filter_quantile(dfdata, c)
+
+def generate_stations_csv_file(station_ids, station_csv_file):
+    dfs = get_stations_cached(station_ids)
+    dfs.to_csv(station_csv_file)
+
+def generate_data_csv_file(station_ids, sdate, edate, var, data_csv_file, resample_interval='15T'):
+    dfdata = get_cdec_data_cached(sdate, edate, station_ids, var)
+    dfdata = dfdata.resample(resample_interval).mean()
+    clean_data(dfdata)
+    dfdata.to_csv(data_csv_file)

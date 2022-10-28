@@ -10,11 +10,7 @@ import holoviews as hv
 from holoviews import dim, opts
 import geoviews as gv
 from .nice_scale import NiceScale
-
-
-def load_transect_file(fname='./Transect_20220302_Fabian.csv'):
-    return pd.read_csv(fname)
-
+from . import transect_data
 
 def points_transect_by_point_size(df, data_column='EC'):
     return df.hvplot.points('Longitude', 'Latitude', geo=True, s=data_column, hover=True, framewise=False)
@@ -211,33 +207,8 @@ def create_vector_field_map(dfv, angle_column='angle', mag_column='mag', mag_uni
     return vecs.opts(framewise=False)  # FIXME: labels causing issues with framewise=False
 
 
-def add_in_station_info(dfs, station_info_file='station_info_file.csv'):
-    return dfs.set_index('Station ID').join(read_station_display_info(station_info_file=station_info_file)).reset_index().fillna(0)
-
-
-def read_station_display_info(station_info_file='station_info_file.csv'):
-    '''reads the station_info_file indexed with first column with 'Station ID' (same as dfs stations)
-    adds in that info with defaults (angle=180, everything else 0) and returns a data frame
-    '''
-    dfinfo = pd.read_csv(station_info_file, index_col=0)
-    dfinfo.dtype = float
-    dfinfo['angle'] = dfinfo['angle'].fillna(180)
-    dfinfo['angle'] = dfinfo['angle'] * math.pi / 180
-    dfinfo = dfinfo.fillna(0.)
-    return dfinfo
-
-
-def read_barriers_info(file='barriers.csv'):  # FIXME: move to data module
-    dfb = pd.read_csv(file)
-    dfb = dfb.astype({'UTMx': 'float', 'UTMy': 'float',
-                     'datein': np.datetime64, 'dateout': np.datetime64})
-    import geopandas as gpd
-    gdfb = gpd.GeoDataFrame(dfb, geometry=gpd.points_from_xy(
-        dfb['UTMx'], dfb['UTMy'], crs='+init=epsg:32610'))
-    gdfb = gdfb.to_crs('EPSG:4326')
-    dfb['Longitude'] = gdfb.geometry.x
-    dfb['Latitude'] = gdfb.geometry.y
-    return dfb.drop(columns=['geometry'])  # gdfb
+def add_in_station_info(dfs, station_display_info):
+    return dfs.set_index('Station ID').join(station_display_info).reset_index().fillna(0)
 
 
 def create_barrier_marks(dfb, date_value):
