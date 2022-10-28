@@ -8,11 +8,9 @@ import hvplot.pandas
 import holoviews as hv
 from holoviews import opts, dim
 import panel as pn
-# SIZING_MODE='scale_both'
-# pn.extension(sizing_mode='stretch_width')
 class TransectMap:
 
-    def __init__(self, gdf, dfs, df_data, sdate, edate, value_range, close_transect=False, data_column='EC'):
+    def __init__(self, transect_pts, stations, df_data, sdate, edate, value_range, close_transect=False, data_column='EC'):
         # store for later use
         self.sdate = sdate
         self.edate = edate
@@ -20,22 +18,22 @@ class TransectMap:
         self.df_data = df_data
         self.data_column = data_column
         # load transect points
-        self.gdf = gdf
-        self.gdf[self.data_column] = np.nan  # change data column to data_values
-        self.dfs = dfs
-        self.gdfs = transect_generator.to_geoframe(self.dfs)
+        self.transect_pts = transect_pts
+        self.transect_pts[self.data_column] = np.nan  # change data column to data_values
+        self.stations = stations
+        self.stations = transect_generator.to_geoframe(self.stations)
         # calculate transect_dist for both points and station points using the transect line created from transect points
-        transect_line = transect_generator.create_transect_line(self.gdf)
-        self.gdf = transect_generator.add_transect_dist(self.gdf, transect_line)
-        self.gdfs = transect_generator.add_transect_dist(self.gdfs, transect_line)
+        transect_line = transect_generator.create_transect_line(self.transect_pts)
+        self.transect_pts = transect_generator.add_transect_dist(self.transect_pts, transect_line)
+        self.stations = transect_generator.add_transect_dist(self.stations, transect_line)
         # create the combined transect from points and stations
         self.dft = transect_generator.create_transect(
-            self.gdf, self.gdfs, data_column=self.data_column, distance_column='transect_dist')
+            self.transect_pts, self.stations, data_column=self.data_column, distance_column='transect_dist')
         if close_transect:
             self.dft = transect_generator.close_transect(
                 self.dft)  # this is special case for Fabian tract
         # station labels for view
-        self.station_labels = transect_viz.labels_for_stations(self.gdfs)
+        self.station_labels = transect_viz.labels_for_stations(self.stations)
         self.show_station_labels = True
         self.tidally_filter = False  # show tidally_filter filtered values
 
@@ -69,9 +67,9 @@ class TransectMapComposite:
         self.transect_map_list = transect_map_list
         for tmap in self.transect_map_list:
             tmap.setup()
-        self.gdfs = pd.concat([tmap.gdfs for tmap in self.transect_map_list])
+        self.stations = pd.concat([tmap.stations for tmap in self.transect_map_list])
         # station labels for view
-        self.station_labels = transect_viz.labels_for_stations(self.gdfs)
+        self.station_labels = transect_viz.labels_for_stations(self.stations)
         self.df_data = pd.concat([tmap.df_data for tmap in self.transect_map_list], axis=1)
         # remove duplicate columns
         self.df_data = self.df_data.loc[:, ~self.df_data.columns.duplicated()].copy()
@@ -112,7 +110,7 @@ class TransectMapComposite:
 
 class GeneratedECMapAnimator:
 
-    def __init__(self, transect_map_list, sdate, edate, dfs, station_display_info, flow_data, barrier_info):
+    def __init__(self, transect_map_list, sdate, edate, stations, station_display_info, flow_data, barrier_info):
         #
         self.overlay = None
         #
@@ -122,8 +120,8 @@ class GeneratedECMapAnimator:
         self.edate = pd.to_datetime(edate)
         self.flow_data = flow_data
         # load stations
-        self.dfs = transect_viz.add_in_station_info(dfs, station_display_info)
-        self.gdfs = transect_generator.to_geoframe(self.dfs)
+        self.stations = transect_viz.add_in_station_info(stations, station_display_info)
+        self.stations = transect_generator.to_geoframe(self.stations)
         self.tiles = hv.element.tiles.CartoLight().redim(x='Longitude', y='Latitude')
         self.dfbarrier = barrier_info
         self.setup()
@@ -135,8 +133,9 @@ class GeneratedECMapAnimator:
     def create_transect_map(self, date_value, value_range):
         return self.tmapc.view(date_value, value_range)
 
-    def create_vectorfield_map(self, date_value, dfflow, gdfs, mag_factor):
-        vfmap = transect_viz.create_vector_field_map(transect_viz.create_vector_field(date_value, dfflow, gdfs, mag_column='flow'),
+    def create_vectorfield_map(self, date_value, mag_factor):
+        dfv = transect_viz.create_vector_field(date_value, self.flow_data, self.stations, mag_column='flow')
+        vfmap = transect_viz.create_vector_field_map(dfv,
                                                      angle_column='angle', mag_column='flow',
                                                      mag_factor=mag_factor, line_width=6, format_str='.0f')
         return vfmap
@@ -146,16 +145,13 @@ class GeneratedECMapAnimator:
         self.tmapc.set_tidally_filter(tidal_filter)
         tmap = self.create_transect_map(date_value, value_range)
         dfflow = self.flow_data_filtered if tidal_filter else self.flow_data
-        fvdmap = self.show_flow_vectors_map(date_value, dfflow, self.gdfs, mag_factor=mag_factor)
-        bpts = self.show_barrier_pts_map(date_value, self.dfbarrier)
+        fvdmap = self.create_vectorfield_map(date_value, mag_factor=mag_factor)
+        bpts = self.show_barrier_pts_map(date_value)
         overlay = (self.tiles * tmap * fvdmap * bpts).opts(title=date_value, framewise=False)
         return overlay
 
-    def show_flow_vectors_map(self, date_value, dfflow, gdfs, mag_factor):
-        return self.create_vectorfield_map(date_value, dfflow, gdfs, mag_factor=mag_factor)
-
-    def show_barrier_pts_map(self, date_value, dfbarrier):
-        return transect_viz.create_barrier_marks(dfbarrier, date_value)
+    def show_barrier_pts_map(self, date_value):
+        return transect_viz.create_barrier_marks(self.dfbarrier, date_value)
 
     def ec_plot(self, date_value, tidal_filter=False):
         self.tmapc.set_tidally_filter(tidal_filter)
@@ -241,8 +237,8 @@ class GeneratedECMapAnimator:
 
         self.widget_area = pn.Column(date_player, date_time_selector, date_slider,
                                      value_range_slider, vector_mag_factor_slider,
-                                     show_station_labels_box, tidal_filter_box, sizing_mode='stretch_width')
-        self.ts_area = pn.Column(tsmap * vlinemap, tsflowmap * vlinemap)
+                                     show_station_labels_box, tidal_filter_box)
+        self.ts_area = pn.Column((tsmap * vlinemap), (tsflowmap * vlinemap))
 
         self.main_panel.objects = [pn.Row(dmap, background='green')]
         self.side_panel.objects = [self.widget_area, self.ts_area]
@@ -252,13 +248,6 @@ class GeneratedECMapAnimator:
 
     def create_main_panel(self):
         self.main_panel = pn.Column()  # sizing mode flexibility causPes issue in geoviews map
-        explanation = pn.pane.Markdown('''
-        # Generated EC at points along the channel
-         EC values generated from observed data stations and linear interpolation. The station locations are roughly at the labels. 
-         The flow arrows are depicted with direction and magnitude indicated by their length.
-
-        The points are colored by the EC values and the point size is also scaled as shown by the value range (larger point size means higher values)
-        ''')
         self.main_panel.loading = True
         return self.main_panel
 
