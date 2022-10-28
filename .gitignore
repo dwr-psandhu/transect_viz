@@ -1,5 +1,6 @@
 # specific to this project
 transect_reports/
+*.csv
 **/cache
 **/junit.xml
 # jupyter notebooks temp dir

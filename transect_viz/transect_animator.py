@@ -1,3 +1,4 @@
+from turtle import width
 from . import transect_viz
 from . import transect_generator
 from . import transect_data
@@ -10,11 +11,8 @@ from holoviews import opts, dim
 import panel as pn
 class TransectMap:
 
-    def __init__(self, transect_pts, stations, df_data, sdate, edate, value_range, close_transect=False, data_column='EC'):
+    def __init__(self, transect_pts, stations, df_data, close_transect=False, data_column='EC'):
         # store for later use
-        self.sdate = sdate
-        self.edate = edate
-        self.value_range = value_range
         self.df_data = df_data
         self.data_column = data_column
         # load transect points
@@ -36,17 +34,15 @@ class TransectMap:
         self.station_labels = transect_viz.labels_for_stations(self.stations)
         self.show_station_labels = True
         self.tidally_filter = False  # show tidally_filter filtered values
-
-    def setup(self):
         self.df_data_filtered = godin(self.df_data.interpolate('linear', limit=100))
 
-    def view(self, date_value):
+    def view(self, date_value, value_range):
         '''return the holoviews view object'''
         df = self.df_data_filtered if self.tidally_filter else self.df_data
         dfresult = transect_generator.interpolate_transect(
             self.dft, df.loc[date_value].to_frame(), data_column=self.data_column)
         map, legend = transect_viz.map_transect_with_size_and_color(
-            dfresult, value_range=self.value_range)
+            dfresult, value_range=value_range)
         overlay = map.opts(framewise=False, colorbar=True)
         if self.show_station_labels:
             overlay = overlay * self.station_labels.opts(framewise=False)
@@ -65,8 +61,6 @@ class TransectMap:
 class TransectMapComposite:
     def __init__(self, transect_map_list):
         self.transect_map_list = transect_map_list
-        for tmap in self.transect_map_list:
-            tmap.setup()
         self.stations = pd.concat([tmap.stations for tmap in self.transect_map_list])
         # station labels for view
         self.station_labels = transect_viz.labels_for_stations(self.stations)
@@ -178,13 +172,13 @@ class GeneratedECMapAnimator:
         self.time_array = time_array
         # assuming 15 min data, so step should be about 1 tidal cycle
         date_player = pn.widgets.DiscretePlayer(
-            name='Date Player', value=time_array[len(time_array) // 2], options=time_array, interval=1500, step=1, width=400)
+            name='Date Player', value=time_array[len(time_array) // 2], options=time_array, interval=1500, step=1, width=self.app.sidebar_width)
         self.date_player = date_player  # keep this reference to change its settings later
         date_slider = pn.widgets.DateSlider(name='Date Slider', start=pd.to_datetime(
-            time_array[0]), end=pd.to_datetime(time_array[-1]))
+            time_array[0]), end=pd.to_datetime(time_array[-1]), width=self.app.sidebar_width)
 
         date_time_selector = pn.widgets.Select(
-            name='Datetime Selector', options=time_array, width=400)
+            name='Datetime Selector', options=time_array)
 
         date_player.link(date_time_selector, value='value',
                          bidirectional=True)  # jslink doesn't work?
@@ -203,10 +197,10 @@ class GeneratedECMapAnimator:
         _ = date_player.link(date_slider, callbacks={'value': sync_slider})
 
         value_range_slider = pn.widgets.RangeSlider(
-            name='Value Range Selector', start=0, end=2000, value=(300, 800), width=400)
+            name='Value Range Selector', start=0, end=2000, value=(300, 800), width=self.app.sidebar_width)
 
         vector_mag_factor_slider = pn.widgets.FloatSlider(
-            name='Vector Magnitude Factor', start=0, end=10, value=1.0, step=0.1)
+            name='Vector Magnitude Factor', start=0, end=10, value=1.0, step=0.1, width=self.app.sidebar_width)
 
         show_station_labels_box = pn.widgets.Checkbox(name='Show Stations', value=True)
 
@@ -228,36 +222,36 @@ class GeneratedECMapAnimator:
         dmap = dmap.opts(framewise=False, responsive=True)
 
         tsmap = hv.DynamicMap(pn.bind(self.ec_plot), streams=dict(
-            date_value=date_player, tidal_filter=tidal_filter_box)).opts(frame_width=300)
+            date_value=date_player, tidal_filter=tidal_filter_box))
 
         tsflowmap = hv.DynamicMap(pn.bind(self.flow_plot), streams=dict(
-                date_value=date_player, tidal_filter=tidal_filter_box)).opts(frame_width=300)
+                date_value=date_player, tidal_filter=tidal_filter_box))
 
         vlinemap = hv.DynamicMap(pn.bind(self.date_line), streams=dict(date_value=date_player))
 
         self.widget_area = pn.Column(date_player, date_time_selector, date_slider,
                                      value_range_slider, vector_mag_factor_slider,
-                                     show_station_labels_box, tidal_filter_box)
+                                     pn.Row(show_station_labels_box, tidal_filter_box))
         self.ts_area = pn.Column((tsmap * vlinemap), (tsflowmap * vlinemap))
+        side_panel = pn.GridSpec(sizing_mode='stretch_height')
+        side_panel[0:2,0] = self.widget_area
+        side_panel[2:5,0] = self.ts_area
 
         self.main_panel.objects = [pn.Row(dmap, background='green')]
-        self.side_panel.objects = [self.widget_area, self.ts_area]
+        self.app.sidebar.append(side_panel)
 
         self.main_panel.loading = False
-        # main_panel
 
     def create_main_panel(self):
-        self.main_panel = pn.Column()  # sizing mode flexibility causPes issue in geoviews map
-        self.main_panel.loading = True
+        self.main_panel = pn.Column()
+        self.main_panel.loading = True # marked false after setup_main_panel runs
         return self.main_panel
 
     def create_app(self):
         self.create_main_panel()
         self.app = pn.template.BootstrapTemplate(
-            title='Visualization of EC in South Delta', sidebar_width=500)
+            title='Visualization of EC in South Delta', sidebar_width=600)
         self.app.main.append(self.main_panel)
-        self.side_panel = pn.Column(width=500)
-        self.app.sidebar.append(self.side_panel)
         return self.app.servable(title='Generated EC Animator Map')
 
     def frame2png(self, date_value, dir='images'):
