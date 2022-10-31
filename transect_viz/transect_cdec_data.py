@@ -117,3 +117,11 @@ def generate_data_csv_file(station_ids, sdate, edate, var, data_csv_file, resamp
     dfdata = dfdata.resample(resample_interval).mean()
     clean_data(dfdata)
     dfdata.to_csv(data_csv_file)
+
+#
+def generate_csv_files(transect_name, station_ids, varname, sdate, edate):
+    stations_csv_file = f'{transect_name}_stations.csv'
+    data_csv_file = f'{transect_name}_{varname.lower()}_data.csv'
+    generate_stations_csv_file(station_ids, stations_csv_file)
+    generate_data_csv_file(station_ids, sdate, edate, varname.upper(), data_csv_file)
+    return stations_csv_file, data_csv_file

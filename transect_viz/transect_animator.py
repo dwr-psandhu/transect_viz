@@ -1,4 +1,6 @@
 from turtle import width
+
+from panel.widgets import slider
 from . import transect_viz
 from . import transect_generator
 from . import transect_data
@@ -9,6 +11,8 @@ import hvplot.pandas
 import holoviews as hv
 from holoviews import opts, dim
 import panel as pn
+
+
 class TransectMap:
 
     def __init__(self, transect_pts, stations, df_data, close_transect=False, data_column='EC'):
@@ -56,6 +60,16 @@ class TransectMap:
                                                      color=list(
                                                          hv.Cycle.default_cycles['Colorblind'])
                                                          ).opts(title='Measured EC with line at current time')
+
+
+def create_transect_map(transect_pts_file, stations_csv_file, data_csv_file, close_transect=False, var_column_name='EC'):
+    # read in data for fabian tract
+    transect_pts = transect_data.read_geojson(transect_pts_file)
+    stations = transect_data.read_stations_csv_file(stations_csv_file)
+    data = transect_data.read_data_csv_file(data_csv_file)
+
+    # configure and return
+    return TransectMap(transect_pts, stations, data, close_transect=close_transect, data_column=var_column_name)
 
 
 class TransectMapComposite:
@@ -128,7 +142,8 @@ class GeneratedECMapAnimator:
         return self.tmapc.view(date_value, value_range)
 
     def create_vectorfield_map(self, date_value, mag_factor):
-        dfv = transect_viz.create_vector_field(date_value, self.flow_data, self.stations, mag_column='flow')
+        dfv = transect_viz.create_vector_field(
+            date_value, self.flow_data, self.stations, mag_column='flow')
         vfmap = transect_viz.create_vector_field_map(dfv,
                                                      angle_column='angle', mag_column='flow',
                                                      mag_factor=mag_factor, line_width=6, format_str='.0f')
@@ -170,13 +185,14 @@ class GeneratedECMapAnimator:
         time_array = [x.strftime('%Y-%m-%d %H:%M')
                       for x in pd.date_range(start=self.sdate, end=self.edate, freq='15T')]
         self.time_array = time_array
+        slider_width = 300
         # assuming 15 min data, so step should be about 1 tidal cycle
         date_player = pn.widgets.DiscretePlayer(
-            name='Date Player', value=time_array[len(time_array) // 2], options=time_array, 
-            interval=1500, step=1, width=self.app.sidebar_width)
+            name='Date Player', value=time_array[len(time_array) // 2], options=time_array,
+            interval=1500, step=1, width=slider_width)
         self.date_player = date_player  # keep this reference to change its settings later
         date_slider = pn.widgets.DateSlider(name='Date Slider', start=pd.to_datetime(
-            time_array[0]), end=pd.to_datetime(time_array[-1]), width=self.app.sidebar_width)
+            time_array[0]), end=pd.to_datetime(time_array[-1]), width=slider_width)
 
         date_time_selector = pn.widgets.Select(
             name='Datetime Selector', options=time_array)
@@ -198,10 +214,10 @@ class GeneratedECMapAnimator:
         _ = date_player.link(date_slider, callbacks={'value': sync_slider})
 
         value_range_slider = pn.widgets.RangeSlider(
-            name='Value Range Selector', start=0, end=2000, value=(300, 800), width=self.app.sidebar_width)
+            name='Value Range Selector', start=0, end=2000, value=(300, 800), width=slider_width)
 
         vector_mag_factor_slider = pn.widgets.FloatSlider(
-            name='Vector Magnitude Factor', start=0, end=10, value=1.0, step=0.1, width=self.app.sidebar_width)
+            name='Vector Magnitude Factor', start=0, end=10, value=1.0, step=0.1, width=slider_width)
 
         show_station_labels_box = pn.widgets.Checkbox(name='Show Stations', value=True)
 
@@ -230,31 +246,31 @@ class GeneratedECMapAnimator:
 
         vlinemap = hv.DynamicMap(pn.bind(self.date_line), streams=dict(date_value=date_player))
 
-        self.widget_area = pn.Column(date_player, date_time_selector, date_slider,
+        self.widget_area = pn.Column(date_player, date_time_selector,  # date_slider,
                                      value_range_slider, vector_mag_factor_slider,
-                                     pn.Row(show_station_labels_box, tidal_filter_box, width=self.app.sidebar_width))
-        self.ts_area = pn.Column((tsmap * vlinemap), (tsflowmap * vlinemap), width=self.app.sidebar_width)
-        side_panel = pn.GridSpec(sizing_mode='stretch_width')
-        side_panel[0:2,0] = self.widget_area
-        side_panel[2:5,0] = self.ts_area
+                                     pn.Row(show_station_labels_box, tidal_filter_box))
 
-        self.main_panel.objects = [pn.Row(dmap, background='green')]
-        self.side_panel.objects = [side_panel]
+        #self.ts_area = pn.Column((tsmap * vlinemap), (tsflowmap * vlinemap))
 
-        self.main_panel.loading = False
-
-    def create_main_panel(self):
-        self.main_panel = pn.Column()
-        self.main_panel.loading = True # marked false after setup_main_panel runs
-        return self.main_panel
+        #side_panel = pn.Column(self.widget_area, self.ts_area)#, sizing_mode='stretch_both')
+        side_panel = pn.GridSpec(sizing_mode='stretch_height', mode='error')
+        side_panel[0:1, 0:8] = date_player
+        side_panel[1:2, 0:8] = date_time_selector
+        side_panel[2:3, 0:8] = value_range_slider
+        side_panel[3:4, 0:8] = vector_mag_factor_slider
+        side_panel[4:5, 0:4] = pn.Row(show_station_labels_box, tidal_filter_box)
+        side_panel[6:10, 0:7] = tsmap*vlinemap
+        side_panel[11:15, 0:7] = tsflowmap*vlinemap
+        return pn.Row(dmap, background='green'), side_panel
+        #self.main_panel.objects = [pn.Row(dmap, background='green')]
+        #self.app.sidebar.objects = [side_panel]
 
     def create_app(self):
-        self.create_main_panel()
         self.app = pn.template.BootstrapTemplate(
-            title='Visualization of EC in South Delta', sidebar_width=400)
-        self.app.main.append(self.main_panel)
-        self.side_panel = pn.Column()
-        self.app.sidebar.append(self.side_panel)
+            title='Visualization of EC in South Delta', sidebar_width=600)
+        main_panel, side_panel = self.setup_main_panel()
+        self.app.main.append(main_panel)
+        self.app.sidebar.objects=[side_panel]
         return self.app.servable(title='Generated EC Animator Map')
 
     def frame2png(self, date_value, dir='images'):

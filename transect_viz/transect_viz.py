@@ -16,6 +16,7 @@ from holoviews import dim, opts
 import panel as pn
 pn.extension()
 
+
 def points_transect_by_point_size(df, data_column='EC'):
     return df.hvplot.points('Longitude', 'Latitude', geo=True, s=data_column, hover=True, framewise=False)
 
@@ -227,18 +228,35 @@ def show_map(dfresult, value_range=None):
     carto_light_tiles = get_tile_layer()
     return carto_light_tiles * map.opts(frame_width=800, colorbar=True) + legend
 
+
 def create_transect_profile(df):
+    from . import transect_generator
     gdf = transect_generator.to_geoframe(df)
     transect_line = transect_generator.create_transect_line(gdf)
     gdf = transect_generator.add_transect_dist(gdf, transect_line)
     return gdf.hvplot.scatter(x='transect_dist', y='EC').opts(
         title='Profile of Specific Conductivity along Transect ', xlabel='Transect Distance (ft)', ylabel='Specific Conductivity')
 
+def show_begin_end_pts_with_labels(df):
+    begin_end = df.iloc[[0, -1]][['Longitude', 'Latitude', 'DateTime']].copy()
+    begin_end['Label'] = ['Start', 'End']
+    print(begin_end)
+    plt = begin_end.iloc[0:1, :].hvplot.labels(
+        x='Longitude', y='Latitude', text='Label', geo=True).opts(opts.Labels(yoffset=300))
+    plt = plt * begin_end.iloc[-1:, :].hvplot.labels(
+        x='Longitude', y='Latitude', text='Label', geo=True).opts(opts.Labels(yoffset=-300))
+    plt = plt * begin_end.hvplot.points(geo=True)
+    return plt
 
-def generate_transect_vizualization(transect_file, stations_csv_file, station_info_file, data_column='Sonde1_SpCond'):
+def make_list(df):
+    return [df[[c]] for c in df.columns]
+
+def generate_transect_vizualization(transect_file, transect_viz_outfile, transect_viz_title, 
+        stations_csv_file, station_info_file,
+        flow_data_file, velocity_data_file, stage_data_file, ec_data_file, data_column='Sonde1_SpCond'):
     #cdec_stations=['ORM', 'ODM', 'OLD', 'GLE', 'GLC']
-    df=transect_data.load_transect_file(transect_file)
-    df['EC'] = df[data_column] # 'EC' is mapped from Sonde1_SpCond
+    df = transect_data.load_transect_file(transect_file)
+    df['EC'] = df[data_column]  # 'EC' is mapped from Sonde1_SpCond
     dfs = transect_data.read_stations_csv_file(stations_csv_file=stations_csv_file)
     station_info = transect_data.read_station_display_info(station_info_file)
     dfs = add_in_station_info(dfs, station_info)
@@ -248,60 +266,58 @@ def generate_transect_vizualization(transect_file, stations_csv_file, station_in
     labels_for_stations(dfs).opts(frame_height=350)
     sdate, edate = get_start_end_dates(df)
     bsdate, bedate = get_buffered_start_end_dates(df)
-    def make_list(df):
-        return [df[[c]] for c in df.columns]
+
     cdec_flows = transect_data.read_data_csv_file(flow_data_file)
     cdec_flows = make_list(cdec_flows)
     cdec_vels = transect_data.read_data_csv_file(velocity_data_file)
     cdec_vels = make_list(cdec_vels)
     collection_span = timespan(sdate, edate)
-    flow_plot = plot_flow_around_time(sdate,edate,cdec_flows)*collection_span
-    velocity_plot = plot_velocity_around_time(sdate,edate,cdec_vels)*collection_span
-    dftidalvelgis = merge_mean_velocity_with_stations(dfs, mean_velocity_over_time(sdate,edate,get_tidal_filtered(cdec_vels)))
-    vel_tidal_vectors = plot_velocity_vectors(dftidalvelgis)*plot_velocity_labels(dftidalvelgis)
-    vel_tidal_map_with_station = station_map_with_tiles*vel_tidal_vectors
-    vel_tidal_map_with_station.opts(frame_height=350, title='Mean Tidally filtered Velocity over collection period', xlabel='Longitude', ylabel='Latitude')
-    dfvelgis = merge_mean_velocity_with_stations(dfs, mean_velocity_over_time(sdate,edate,cdec_vels))
-    vel_vectors = plot_velocity_vectors(dfvelgis)*plot_velocity_labels(dfvelgis)
-    vel_map_with_station = station_map_with_tiles*vel_vectors
-    vel_map_with_station.opts(frame_height=350, title='Mean Velocity over collection period', xlabel='Longitude', ylabel='Latitude')
-    def show_begin_end_pts_with_labels(df):
-        begin_end = df.iloc[[0, -1]][['Longitude', 'Latitude', 'DateTime']].copy()
-        begin_end['Label'] = ['Start', 'End']
-        print(begin_end)
-        plt = begin_end.iloc[0:1, :].hvplot.labels(
-            x='Longitude', y='Latitude', text='Label', geo=True).opts(opts.Labels(yoffset=300))
-        plt = plt * begin_end.iloc[-1:, :].hvplot.labels(
-            x='Longitude', y='Latitude', text='Label', geo=True).opts(opts.Labels(yoffset=-300))
-        plt = plt * begin_end.hvplot.points(geo=True)
-        return plt
-    vel_map_with_station*show_begin_end_pts_with_labels(df)
+    flow_plot = plot_flow_around_time(sdate, edate, cdec_flows) * collection_span
+    velocity_plot = plot_velocity_around_time(sdate, edate, cdec_vels) * collection_span
+    dftidalvelgis = merge_mean_velocity_with_stations(
+        dfs, mean_velocity_over_time(sdate, edate, get_tidal_filtered(cdec_vels)))
+    vel_tidal_vectors = plot_velocity_vectors(dftidalvelgis) * plot_velocity_labels(dftidalvelgis)
+    vel_tidal_map_with_station = station_map_with_tiles * vel_tidal_vectors
+    vel_tidal_map_with_station.opts(
+        frame_height=350, title='Mean Tidally filtered Velocity over collection period', xlabel='Longitude', ylabel='Latitude')
+    dfvelgis = merge_mean_velocity_with_stations(
+        dfs, mean_velocity_over_time(sdate, edate, cdec_vels))
+    vel_vectors = plot_velocity_vectors(dfvelgis) * plot_velocity_labels(dfvelgis)
+    vel_map_with_station = station_map_with_tiles * vel_vectors
+    vel_map_with_station.opts(
+        frame_height=350, title='Mean Velocity over collection period', xlabel='Longitude', ylabel='Latitude')
+
+    vel_map_with_station * show_begin_end_pts_with_labels(df)
     map1, legend1 = map_transect_with_size_and_color(df)
-    map1 = get_tile_layer('CartoLight')*map1.opts(xlabel='Longitude', ylabel='Latitude')
+    map1 = get_tile_layer('CartoLight') * map1.opts(xlabel='Longitude', ylabel='Latitude')
     map1 = map1.opts(opts.Points(colorbar=True)).opts(title='Transect EC by size and color')
-    vel_map2=pn.Row(vel_map_with_station.opts(frame_width=700, frame_height=300), vel_tidal_map_with_station.opts(frame_width=700, frame_height=300))
-    map_panel = pn.Row(pn.Column(pn.Row(map1.opts(frame_width=700, frame_height=300),legend1.opts(title='Point Size Legend')),
+    vel_map2 = pn.Row(vel_map_with_station.opts(frame_width=700, frame_height=300),
+                      vel_tidal_map_with_station.opts(frame_width=700, frame_height=300))
+    map_panel = pn.Row(pn.Column(pn.Row(map1.opts(frame_width=700, frame_height=300), legend1.opts(title='Point Size Legend')),
                                 pn.Row(vel_map_with_station.opts(frame_width=700, frame_height=300),
                                     transect_profile_plot)))
-    tidal_plot = plot_tidal_filtered_flow_around_time(sdate, edate, get_tidal_filtered(cdec_flows))*collection_span
-    tidal_vel_plot = plot_tidal_filtered_velocity_around_time(sdate, edate, get_tidal_filtered(cdec_vels))*collection_span
-    flow_velocity_panel = pn.Column(pn.Row(flow_plot, tidal_plot), pn.Row(velocity_plot, tidal_vel_plot))
+    tidal_plot = plot_tidal_filtered_flow_around_time(
+        sdate, edate, get_tidal_filtered(cdec_flows)) * collection_span
+    tidal_vel_plot = plot_tidal_filtered_velocity_around_time(
+        sdate, edate, get_tidal_filtered(cdec_vels)) * collection_span
+    flow_velocity_panel = pn.Column(pn.Row(flow_plot, tidal_plot),
+                                    pn.Row(velocity_plot, tidal_vel_plot))
     cdec_stage = transect_data.read_data_csv_file(stage_data_file)
     cdec_stage = make_list(cdec_stage)
     cdec_ec = transect_data.read_data_csv_file(ec_data_file)
     cdec_ec = make_list(cdec_ec)
 
     stage_plot = plot_data_around_time(
-        sdate, edate, cdec_stage, data_type='stage', ylabel='Stage (ft)', title='Stage')*timespan(sdate, edate)
+        sdate, edate, cdec_stage, data_type='stage', ylabel='Stage (ft)', title='Stage') * timespan(sdate, edate)
 
     tidal_stage_plot = plot_data_around_time(sdate, edate, get_tidal_filtered(
-        cdec_stage), data_type='stage', ylabel='Stage (ft)', title='Stage tidally filtered')*timespan(sdate, edate)
+        cdec_stage), data_type='stage', ylabel='Stage (ft)', title='Stage tidally filtered') * timespan(sdate, edate)
 
     ec_plot = plot_data_around_time(
-        sdate, edate, cdec_ec, data_type='ec', ylabel='EC (umhos/cm)', title='EC')*timespan(sdate, edate)
+        sdate, edate, cdec_ec, data_type='ec', ylabel='EC (umhos/cm)', title='EC') * timespan(sdate, edate)
 
     tidal_ec_plot = plot_data_around_time(sdate, edate, get_tidal_filtered(
-        cdec_ec), data_type='ec', ylabel='Tidally filtered EC (umhos/cm)', title='EC')*timespan(sdate, edate)
+        cdec_ec), data_type='ec', ylabel='Tidally filtered EC (umhos/cm)', title='EC') * timespan(sdate, edate)
     stage_ec_panel = pn.Column(pn.Row(stage_plot, tidal_stage_plot), pn.Row(ec_plot, tidal_ec_plot))
     full_panel = pn.Column(map_panel, flow_velocity_panel, stage_ec_panel)
-    pn.io.save.save(full_panel, transect_viz_outfile,title=transect_viz_title)
+    pn.io.save.save(full_panel, transect_viz_outfile, title=transect_viz_title)

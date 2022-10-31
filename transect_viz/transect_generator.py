@@ -122,3 +122,4 @@ def interpolate_transect(dft, df_vals, data_column='EC'):
     dft[data_column] = dfj['values'].interpolate('index').fillna(
         method='bfill').fillna(method='ffill').values
     return dft
+
