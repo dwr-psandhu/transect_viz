@@ -6,6 +6,7 @@ from shapely.geometry import Point, LineString
 from shapely.geometry import LinearRing
 from shapely.ops import nearest_points
 
+
 def create_points_along_line(line, delx=25):
     '''
     line is a shapely line string
@@ -22,13 +23,6 @@ def add_lon_lat(gdfp):
     gdfp['Longitude'] = gdfp_ll.geometry.x
     gdfp['Latitude'] = gdfp_ll.geometry.y
     return gdfp
-
-
-def convert_geojson_line_to_pts(line_file, pts_file, delx=25):
-    df = read_geojson(line_file)
-    dfp = create_points_along_line(df.iloc[0].geometry, delx=delx)
-    dfp = add_lon_lat(dfp)
-    to_geojson(dfp, pts_file)
 
 
 def create_transect_line(gdf):
@@ -96,7 +90,7 @@ def create_transect(gdf, gdfs, data_column='EC', distance_column='transect_dist'
     columns = ['Longitude', 'Latitude', 'geometry']
     if 'DateTime' in gdf.columns:
         columns.append('DateTime')
-    gdf = gdf[columns+[data_column, distance_column]]
+    gdf = gdf[columns + [data_column, distance_column]]
     gdfs = gdfs[['Longitude', 'Latitude', 'geometry', 'Station ID', distance_column]]
     df_ec_transect = pd.concat([gdf, gdfs]).set_index(distance_column).sort_index()
     return df_ec_transect
@@ -124,6 +118,7 @@ def interpolate_transect(dft, df_vals, data_column='EC'):
     dft is indexed by which it is then interpolated (usually distance along the transect)'''
     df_vals.columns = ['values']
     dfj = dft.join(df_vals, on='Station ID')
-    # run backward and forward fills after interpolation 
-    dft[data_column] = dfj['values'].interpolate('index').fillna(method='bfill').fillna(method='ffill').values
+    # run backward and forward fills after interpolation
+    dft[data_column] = dfj['values'].interpolate('index').fillna(
+        method='bfill').fillna(method='ffill').values
     return dft

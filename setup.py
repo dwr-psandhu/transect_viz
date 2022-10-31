@@ -3,6 +3,7 @@ import versioneer
 
 requirements = [
     # package requirements go here
+    'Click',
     'hvplot',
     'panel',
     'geoviews',
@@ -11,6 +12,10 @@ requirements = [
     'xarray',
     'vtools3'
 ]
+
+setup_requirements = ['pytest-runner>=5.0', ]
+
+test_requirements = ['pytest>=5.0', ]
 
 setup(
     name='transect_viz',
@@ -24,14 +29,15 @@ setup(
     packages=['transect_viz'],
     entry_points={
         'console_scripts': [
-            'transect_viz=transect_viz.cli:cli'
+            'transect_viz=transect_viz.cli:main'
         ]
     },
     install_requires=requirements,
+    include_package_data=True,
     keywords='transect_viz',
     classifiers=[
-        'Programming Language :: Python :: 2.7',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ]
 )

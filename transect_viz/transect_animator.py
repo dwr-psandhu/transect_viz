@@ -172,7 +172,8 @@ class GeneratedECMapAnimator:
         self.time_array = time_array
         # assuming 15 min data, so step should be about 1 tidal cycle
         date_player = pn.widgets.DiscretePlayer(
-            name='Date Player', value=time_array[len(time_array) // 2], options=time_array, interval=1500, step=1, width=self.app.sidebar_width)
+            name='Date Player', value=time_array[len(time_array) // 2], options=time_array, 
+            interval=1500, step=1, width=self.app.sidebar_width)
         self.date_player = date_player  # keep this reference to change its settings later
         date_slider = pn.widgets.DateSlider(name='Date Slider', start=pd.to_datetime(
             time_array[0]), end=pd.to_datetime(time_array[-1]), width=self.app.sidebar_width)
@@ -231,14 +232,14 @@ class GeneratedECMapAnimator:
 
         self.widget_area = pn.Column(date_player, date_time_selector, date_slider,
                                      value_range_slider, vector_mag_factor_slider,
-                                     pn.Row(show_station_labels_box, tidal_filter_box))
-        self.ts_area = pn.Column((tsmap * vlinemap), (tsflowmap * vlinemap))
-        side_panel = pn.GridSpec(sizing_mode='stretch_height')
+                                     pn.Row(show_station_labels_box, tidal_filter_box, width=self.app.sidebar_width))
+        self.ts_area = pn.Column((tsmap * vlinemap), (tsflowmap * vlinemap), width=self.app.sidebar_width)
+        side_panel = pn.GridSpec(sizing_mode='stretch_width')
         side_panel[0:2,0] = self.widget_area
         side_panel[2:5,0] = self.ts_area
 
         self.main_panel.objects = [pn.Row(dmap, background='green')]
-        self.app.sidebar.append(side_panel)
+        self.side_panel.objects = [side_panel]
 
         self.main_panel.loading = False
 
@@ -250,8 +251,10 @@ class GeneratedECMapAnimator:
     def create_app(self):
         self.create_main_panel()
         self.app = pn.template.BootstrapTemplate(
-            title='Visualization of EC in South Delta', sidebar_width=600)
+            title='Visualization of EC in South Delta', sidebar_width=400)
         self.app.main.append(self.main_panel)
+        self.side_panel = pn.Column()
+        self.app.sidebar.append(self.side_panel)
         return self.app.servable(title='Generated EC Animator Map')
 
     def frame2png(self, date_value, dir='images'):

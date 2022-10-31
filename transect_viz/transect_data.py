@@ -44,6 +44,14 @@ def to_geojson(gdf, file):
     gdf.to_file(file, driver='GeoJSON')
 
 
+def convert_geojson_line_to_pts(line_file, pts_file, delx=25):
+    df = read_geojson(line_file)
+    from . import transect_generator
+    dfp = transect_generator.create_points_along_line(df.iloc[0].geometry, delx=delx)
+    dfp = transect_generator.add_lon_lat(dfp)
+    to_geojson(dfp, pts_file)
+
+
 def read_stations_csv_file(stations_csv_file):
     return pd.read_csv(stations_csv_file)
 
@@ -51,4 +59,3 @@ def read_stations_csv_file(stations_csv_file):
 def read_data_csv_file(data_csv_file):
     df = pd.read_csv(data_csv_file, index_col=0, parse_dates=True)
     return df.asfreq(pd.infer_freq(df.index))
-
