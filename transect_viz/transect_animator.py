@@ -135,15 +135,16 @@ class GeneratedECMapAnimator:
         self.setup()
 
     def setup(self):
-        self.flow_data = self.flow_data.interpolate()  # fill nans
+        self.flow_data = self.flow_data.interpolate(limit=10)  # fill nans
         self.flow_data_filtered = godin(self.flow_data.interpolate('linear', limit=100))
 
     def create_transect_map(self, date_value, value_range):
         return self.tmapc.view(date_value, value_range)
 
-    def create_vectorfield_map(self, date_value, mag_factor):
+    def create_vectorfield_map(self, date_value, mag_factor, tidal_filter):
+        dfflow = self.flow_data_filtered if tidal_filter else self.flow_data
         dfv = transect_viz.create_vector_field(
-            date_value, self.flow_data, self.stations, mag_column='flow')
+            date_value, dfflow, self.stations, mag_column='flow')
         vfmap = transect_viz.create_vector_field_map(dfv,
                                                      angle_column='angle', mag_column='flow',
                                                      mag_factor=mag_factor, line_width=6, format_str='.0f')
@@ -154,7 +155,7 @@ class GeneratedECMapAnimator:
         self.tmapc.set_tidally_filter(tidal_filter)
         tmap = self.create_transect_map(date_value, value_range)
         dfflow = self.flow_data_filtered if tidal_filter else self.flow_data
-        fvdmap = self.create_vectorfield_map(date_value, mag_factor=mag_factor)
+        fvdmap = self.create_vectorfield_map(date_value, mag_factor=mag_factor, tidal_filter=tidal_filter)
         bpts = self.show_barrier_pts_map(date_value)
         overlay = (self.tiles * tmap * fvdmap * bpts).opts(title=date_value, framewise=False)
         return overlay

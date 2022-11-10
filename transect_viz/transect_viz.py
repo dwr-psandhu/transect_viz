@@ -219,8 +219,7 @@ def add_in_station_info(dfs, station_display_info):
 def create_barrier_marks(dfb, date_value):
     dfbnow = dfb[(dfb.datein <= pd.to_datetime(date_value)) &
                  (dfb.dateout >= pd.to_datetime(date_value))]
-    return gv.Points(dfbnow, kdims=['Longitude', 'Latitude']).opts(
-        marker='square', size=20, color='black', framewise=False)
+    return gv.Rectangles(zip(dfbnow['Longitude']-0.001,dfbnow['Latitude']-0.002,dfbnow['Longitude']+0.001,dfbnow['Latitude']+0.002)).opts(color='black', alpha=0.6, framewise=False)
 
 
 def show_map(dfresult, value_range=None):
